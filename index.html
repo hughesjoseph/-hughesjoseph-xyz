@@ -54,11 +54,11 @@ font-size:11px;font-weight:700;letter-spacing:.035em;text-transform:uppercase}
 @media(max-width:700px){#speaker{right:18px;bottom:17px}}
 .triptych{width:65%;height:65%;display:flex;gap:8px;align-items:center;justify-content:center}#stage .triptych img{width:calc((100% - 16px)/3);height:100%;object-fit:contain}
 #splash{position:fixed;inset:0;background:#fff;z-index:9999;display:flex;align-items:center;justify-content:center}
-#loaderControl{position:relative;width:48px;height:48px;display:flex;align-items:center;justify-content:center;font:10px/1 Arial,sans-serif;color:#111;user-select:none}
-#loaderRing{position:absolute;inset:0;border:1px solid #d0d0d0;border-top-color:#111;border-radius:50%;animation:spin .85s linear infinite}
-#loaderPercent{position:relative;z-index:1}
-#enterButton{display:none;border:0;background:transparent;padding:12px;font:11px/1 Arial,sans-serif;color:#111;cursor:pointer}
-@keyframes spin{to{transform:rotate(360deg)}}
+#loaderControl{position:relative;width:48px;height:48px;display:flex;align-items:center;justify-content:center;color:#111}
+#loaderRing{position:absolute;inset:0;border:1px solid #d3d3d3;border-top-color:#111;border-radius:50%;animation:loaderSpin .85s linear infinite}
+#loaderPercent{position:relative;z-index:1;font:10px/1 Arial,Helvetica,sans-serif}
+#enterButton{display:none;border:0;background:transparent;color:#111;padding:14px;font:11px/1 Arial,Helvetica,sans-serif;letter-spacing:.035em;cursor:pointer;text-transform:uppercase}
+@keyframes loaderSpin{to{transform:rotate(360deg)}}
 </style></head>
 <body><div id="splash"><div id="loaderControl"><div id="loaderRing"></div><span id="loaderPercent">00%</span><button id="enterButton" type="button">ENTER</button></div></div>
 <div id="viewport">
@@ -90,43 +90,7 @@ font-size:11px;font-weight:700;letter-spacing:.035em;text-transform:uppercase}
 </button>
 
 <audio id="soundtrack" src="sound/little-jammy-centre.mp3" preload="auto" loop></audio>
-<script src="assets.js">
-const splash=document.getElementById('splash');
-const loaderRing=document.getElementById('loaderRing');
-const loaderPercent=document.getElementById('loaderPercent');
-const enterButton=document.getElementById('enterButton');
-let preloadDone=0;
-const preloadPool=[...ASSETS].sort(()=>Math.random()-.5).slice(0,12);
-const markLoaded=()=>{
-  preloadDone++;
-  const pct=Math.min(100,Math.round(preloadDone/preloadPool.length*100));
-  loaderPercent.textContent=String(pct).padStart(2,'0')+'%';
-  if(preloadDone>=preloadPool.length){
-    loaderRing.style.display='none';
-    loaderPercent.style.display='none';
-    enterButton.style.display='block';
-  }
-};
-preloadPool.forEach(a=>{
-  if(a.type==='image'||a.type==='gif'){
-    const im=new Image(); im.onload=markLoaded; im.onerror=markLoaded; im.src=a.src;
-  }else if(a.type==='video'){
-    const v=document.createElement('video'); v.preload='metadata'; v.muted=true;
-    v.onloadedmetadata=markLoaded; v.onerror=markLoaded; v.src=a.src;
-  }else{markLoaded();}
-});
-setTimeout(()=>{
-  if(preloadDone<preloadPool.length){
-    preloadDone=preloadPool.length;loaderPercent.textContent='100%';
-    loaderRing.style.display='none';loaderPercent.style.display='none';enterButton.style.display='block';
-  }
-},4500);
-enterButton.addEventListener('click',async()=>{
-  try{soundtrack.currentTime=0;soundtrack.muted=false;await soundtrack.play();}catch(e){}
-  splash.remove();
-  show(nextIndex());
-});
-</script>
+<script src="assets.js"></script>
 <script>
 (()=>{const soundtrack=document.getElementById('soundtrack');
 const speaker=document.getElementById('speaker');
@@ -139,6 +103,11 @@ function playFullTrack(){
  soundOn=true;
  soundtrack.play().then(soundLabel).catch(()=>{soundOn=false;soundLabel()});
 }
+window.__startSound=()=>{
+ soundtrack.currentTime=0;
+ soundOn=true;
+ return soundtrack.play().then(soundLabel).catch(()=>{soundOn=false;soundLabel()});
+};
 function toggleSound(e){
  if(e){e.preventDefault();e.stopPropagation()}
  if(soundOn){soundtrack.pause();soundOn=false;soundLabel()}
@@ -147,16 +116,6 @@ function toggleSound(e){
 speaker.addEventListener('pointerup',toggleSound);
 speaker.addEventListener('click',e=>e.stopPropagation());
 soundLabel();
-// Audible autoplay is browser-blocked: the first interaction anywhere unlocks the COMPLETE track.
-function unlockSound(){
- if(!soundOn)playFullTrack();
- document.removeEventListener('pointerdown',unlockSound,true);
- document.removeEventListener('keydown',unlockSound,true);
-}
-document.addEventListener('pointerdown',unlockSound,true);
-document.addEventListener('keydown',unlockSound,true);
-
-
 const stage=document.getElementById('stage'), info=document.getElementById('info'),
 captionWrap=document.getElementById('captionWrap'), caption=document.getElementById('caption');
 let order=[],i=-1,timer=null,paused=false,current=null,remaining=0,started=0,wasPaused=false;
@@ -226,7 +185,32 @@ document.addEventListener('keydown',e=>{
  else if(e.key==='ArrowLeft'){e.preventDefault();previous()}
  else if(e.key==='ArrowRight'){e.preventDefault();forward()}
 });
-order=shuffled();next();
+order=shuffled();window.__startFeed=()=>{if(i<0)next()};
+})();
+</script>
+
+<script>
+(()=>{
+ const splash=document.getElementById('splash');
+ const ring=document.getElementById('loaderRing');
+ const pct=document.getElementById('loaderPercent');
+ const enter=document.getElementById('enterButton');
+ const pool=[...ASSETS].sort(()=>Math.random()-.5).slice(0,12);
+ let done=0,ready=false;
+ function finish(){if(ready)return;ready=true;ring.style.display='none';pct.style.display='none';enter.style.display='block'}
+ function mark(){done++;pct.textContent=String(Math.min(100,Math.round(done/pool.length*100))).padStart(2,'0')+'%';if(done>=pool.length)finish()}
+ pool.forEach(a=>{
+   if(a.type==='image'||a.type==='gif'){const im=new Image();im.onload=mark;im.onerror=mark;im.src=a.src;}
+   else if(a.type==='video'){const v=document.createElement('video');v.preload='metadata';v.muted=true;v.onloadedmetadata=mark;v.onerror=mark;v.src=a.src;}
+   else mark();
+ });
+ setTimeout(()=>{pct.textContent='100%';finish()},4000);
+ enter.addEventListener('click',async()=>{
+   enter.disabled=true;
+   try{if(window.__startSound)await window.__startSound()}catch(e){}
+   splash.remove();
+   if(window.__startFeed)window.__startFeed();
+ });
 })();
 </script>
 </body></html>
